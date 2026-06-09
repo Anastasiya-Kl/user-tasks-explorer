@@ -1,4 +1,6 @@
 import { isRouteErrorResponse, useRouteError } from 'react-router-dom'
+import * as E from 'fp-ts/Either'
+import { identity, pipe } from 'fp-ts/function'
 
 import { routes } from '../../config/routes'
 import {
@@ -14,11 +16,17 @@ import {
 export function ErrorPage() {
   const error = useRouteError()
 
-  const message = isRouteErrorResponse(error)
-    ? error.statusText
-    : error instanceof Error
-      ? error.message
-      : 'Something went wrong.'
+  const message = pipe(
+    error,
+    E.fromPredicate(isRouteErrorResponse, identity),
+    E.match(
+      (unknownError) =>
+        unknownError instanceof Error
+          ? unknownError.message
+          : 'Something went wrong.',
+      (routeError) => routeError.statusText,
+    ),
+  )
 
   return (
     <Page>

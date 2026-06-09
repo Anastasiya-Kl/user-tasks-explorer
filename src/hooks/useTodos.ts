@@ -1,30 +1,28 @@
 import { useQuery } from '@tanstack/react-query'
-import * as E from 'fp-ts/Either'
+import * as O from 'fp-ts/Option'
+import * as TE from 'fp-ts/TaskEither'
+import { pipe } from 'fp-ts/function'
 
-import type { ApiError } from '../api/errors'
+import { networkError, type ApiError } from '../api/errors'
 import { getTodos } from '../api/todos'
 import type { Todo } from '../types/todo'
+import { taskEitherToPromise } from '../utils/taskEither'
 
-export const useTodos = (userId: number | null | undefined) =>
-  useQuery<Todo[], ApiError>({
+export const useTodos = (userId: O.Option<number>) =>
+  useQuery<ReadonlyArray<Todo>, ApiError>({
     queryKey: ['todos', userId],
-    enabled: userId != null,
+    enabled: O.isSome(userId),
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-
-      if (userId == null) {
-        throw {
-          type: 'NetworkError',
-          message: 'User id is required',
-        }
-      }
-
-      const result = await getTodos(userId)()
-
-      if (E.isLeft(result)) {
-        throw result.left
-      }
-
-      return result.right
-    },
+    queryFn: () =>
+      pipe(
+        userId,
+        O.match(
+          () =>
+            TE.left<ApiError, ReadonlyArray<Todo>>(
+              networkError('User id is required'),
+            ),
+          getTodos,
+        ),
+        taskEitherToPromise,
+      ),
   })

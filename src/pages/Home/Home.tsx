@@ -2,8 +2,16 @@ import {
   TodoSkeleton,
   UserCardSkeleton,
 } from '../../components/Skeleton/Skeleton'
+import * as O from 'fp-ts/Option'
+import * as RA from 'fp-ts/ReadonlyArray'
+import { pipe } from 'fp-ts/function'
 import { Todo } from '../../components/Todo/Todo'
 import { UserCard } from '../../components/UserCard/UserCard'
+import { getApiErrorMessage } from '../../api/errors'
+import {
+  findSelectedUser,
+  isSelectedUser,
+} from './model'
 import { useHomePage } from './useHomePage'
 import {
   CheckboxInput,
@@ -32,127 +40,144 @@ const TODO_SKELETON_COUNT = 6
 export function Home() {
   const {
     users,
-    todos,
     filteredTodos,
     selectedUserId,
     hideCompleted,
     selectUser,
     toggleHideCompleted,
     isUsersLoading,
-    isTodosLoading,
     usersError,
     todosError,
+    viewModel,
   } = useHomePage()
 
-  const hasSelectedUser = selectedUserId != null
-  const selectedUser = users.find((user) => user.id === selectedUserId)
+  const selectedUser = pipe(users, findSelectedUser(selectedUserId))
+  const userIsSelectedById = isSelectedUser(selectedUserId)
 
   return (
     <Page>
-       <Container>
+      <Container>
         <Header>
-        <PageTitle>User Tasks</PageTitle>
-        <PageSubtitle>Browse users and explore their assigned tasks.</PageSubtitle>
-      </Header>
+          <PageTitle>User Tasks</PageTitle>
+          <PageSubtitle>
+            Browse users and explore their assigned tasks.
+          </PageSubtitle>
+        </Header>
 
-      <Content>
-        <SidebarSection aria-labelledby="users-heading">
-          <SectionHeader>
-            <SectionTitle id="users-heading">Users</SectionTitle>
-          </SectionHeader>
+        <Content>
+          <SidebarSection aria-labelledby="users-heading">
+            <SectionHeader>
+              <SectionTitle id="users-heading">Users</SectionTitle>
+            </SectionHeader>
 
-          {isUsersLoading && (
-            <UsersList>
-              {Array.from({ length: USER_SKELETON_COUNT }, (_, index) => (
-                <UserCardSkeleton key={index} />
-              ))}
-            </UsersList>
-          )}
-
-          {usersError != null && (
-            <ErrorMessage>{usersError.message}</ErrorMessage>
-          )}
-
-          {!isUsersLoading && usersError == null && users.length === 0 && (
-            <StateMessage>No users available.</StateMessage>
-          )}
-
-          {users.length > 0 && (
-            <UsersList>
-              {users.map((user) => (
-                <UserCard
-                  key={user.id}
-                  user={user}
-                  selected={user.id === selectedUserId}
-                  onSelect={selectUser}
-                />
-              ))}
-            </UsersList>
-          )}
-        </SidebarSection>
-
-        <MainSection aria-labelledby="todos-heading">
-          <SectionHeader>
-            <TitleGroup>
-              <SectionTitle id="todos-heading">Todos</SectionTitle>
-              {selectedUser != null && (
-                <SelectedUserName>{selectedUser.name}</SelectedUserName>
-              )}
-            </TitleGroup>
-
-            {hasSelectedUser && (
-              <CheckboxLabel>
-                <CheckboxInput
-                  type="checkbox"
-                  checked={hideCompleted}
-                  onChange={toggleHideCompleted}
-                />
-                Hide completed
-              </CheckboxLabel>
+            {isUsersLoading && (
+              <UsersList>
+                {RA.makeBy(USER_SKELETON_COUNT, (index) => (
+                  <UserCardSkeleton key={index} />
+                ))}
+              </UsersList>
             )}
-          </SectionHeader>
 
-          {!hasSelectedUser && (
-            <StateMessage>Select a user to view todos.</StateMessage>
-          )}
+            {pipe(
+              usersError,
+              O.match(
+                () => null,
+                (error) => (
+                  <ErrorMessage>{getApiErrorMessage(error)}</ErrorMessage>
+                ),
+              ),
+            )}
 
-          {hasSelectedUser && isTodosLoading && (
-            <TodoList>
-              {Array.from({ length: TODO_SKELETON_COUNT }, (_, index) => (
-                <TodoSkeleton key={index} />
-              ))}
-            </TodoList>
-          )}
+            {viewModel.showUsersEmptyState && (
+              <StateMessage>No users available.</StateMessage>
+            )}
 
-          {hasSelectedUser && todosError != null && (
-            <ErrorMessage>{todosError.message}</ErrorMessage>
-          )}
+            {RA.isNonEmpty(users) && (
+              <UsersList>
+                {pipe(
+                  users,
+                  RA.map((user) => (
+                    <UserCard
+                      key={user.id}
+                      user={user}
+                      selected={userIsSelectedById(user)}
+                      onSelect={selectUser}
+                    />
+                  )),
+                )}
+              </UsersList>
+            )}
+          </SidebarSection>
 
-          {hasSelectedUser &&
-            !isTodosLoading &&
-            todosError == null &&
-            todos.length === 0 && (
+          <MainSection aria-labelledby="todos-heading">
+            <SectionHeader>
+              <TitleGroup>
+                <SectionTitle id="todos-heading">Todos</SectionTitle>
+                {pipe(
+                  selectedUser,
+                  O.match(
+                    () => null,
+                    (user) => (
+                      <SelectedUserName>{user.name}</SelectedUserName>
+                    ),
+                  ),
+                )}
+              </TitleGroup>
+
+              {viewModel.hasSelectedUser && (
+                <CheckboxLabel>
+                  <CheckboxInput
+                    type="checkbox"
+                    checked={hideCompleted}
+                    onChange={toggleHideCompleted}
+                  />
+                  Hide completed
+                </CheckboxLabel>
+              )}
+            </SectionHeader>
+
+            {!viewModel.hasSelectedUser && (
+              <StateMessage>Select a user to view todos.</StateMessage>
+            )}
+
+            {viewModel.showTodosLoading && (
+              <TodoList>
+                {RA.makeBy(TODO_SKELETON_COUNT, (index) => (
+                  <TodoSkeleton key={index} />
+                ))}
+              </TodoList>
+            )}
+
+            {viewModel.showTodosError &&
+              pipe(
+                todosError,
+                O.match(
+                  () => null,
+                  (error) => (
+                    <ErrorMessage>{getApiErrorMessage(error)}</ErrorMessage>
+                  ),
+                ),
+              )}
+
+            {viewModel.showTodosEmptyState && (
               <StateMessage>No todos available.</StateMessage>
             )}
 
-          {hasSelectedUser &&
-            !isTodosLoading &&
-            todosError == null &&
-            todos.length > 0 &&
-            filteredTodos.length === 0 && (
+            {viewModel.showFilteredEmptyState && (
               <StateMessage>No todos after filtering.</StateMessage>
             )}
 
-          {hasSelectedUser && filteredTodos.length > 0 && (
-            <TodoList>
-              {filteredTodos.map((todo) => (
-                <Todo key={todo.id} todo={todo} />
-              ))}
-            </TodoList>
-          )}
-        </MainSection>
-      </Content>
-       </Container>
+            {viewModel.showTodoList && (
+              <TodoList>
+                {pipe(
+                  filteredTodos,
+                  RA.map((todo) => <Todo key={todo.id} todo={todo} />),
+                )}
+              </TodoList>
+            )}
+          </MainSection>
+        </Content>
+      </Container>
     </Page>
   )
 }

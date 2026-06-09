@@ -13,6 +13,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.100.14",
     "fp-ts": "^2.16.11",
+    "fp-ts-std": "^1.0.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^6.30.4",

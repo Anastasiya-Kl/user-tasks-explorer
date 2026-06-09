@@ -66,9 +66,21 @@ The API layer uses:
 
 - Zod for runtime validation
 - fp-ts TaskEither for explicit success/error modeling
-- Typed ApiError models for network and validation failures
+- Typed ApiError ADT for network, HTTP, and validation failures
 
 This keeps validation and error mapping at the application boundary.
+
+## Functional Architecture
+
+fp-ts is used throughout the application for domain modeling and data flow:
+
+- Option for nullable and optional values
+- Either for synchronous validation
+- TaskEither for asynchronous API operations
+- ReadonlyArray for immutable collection processing
+- ReadonlyNonEmptyArray for validation issues
+
+The API layer keeps failures as values until the React Query boundary.
 
 ### React Query
 
@@ -83,23 +95,27 @@ The UI consumes already-processed data through custom hooks.
 
 ### Page State
 
-The Home page uses a dedicated `useHomePage` hook that manages:
+The Home page uses:
 
-- Selected user
-- Filter state
-- Session persistence
-- Derived filtered TODOs
+- A reducer-driven HomeState model
+- HomeAction events
+- A TodoFilter ADT
+- Pure state transitions
+- Session persistence through encoding/decoding functions
 
-This keeps UI components focused on rendering.
+State transitions are tested independently from React.
 
 ## Testing
 
-The project includes:
+The project includes tests for:
 
-- Hook tests for business logic and persistence behavior
-- Component tests for rendering and user interaction
+- API decoding and validation
+- TaskEither-based data fetching
+- View-model and page-state logic
+- Custom hooks
+- UI components
 
-Tests focus on behavior rather than implementation details or styling.
+Tests focus on observable behavior rather than implementation details.
 
 ## Persistence
 
@@ -108,4 +124,4 @@ The following values are stored in sessionStorage:
 - `selectedUserId`
 - `hideCompleted`
 
-This preserves the page state across browser refreshes while keeping the implementation simple.
+Persistence encoding and decoding are implemented as pure functions and tested independently from browser APIs.

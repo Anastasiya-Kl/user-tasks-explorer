@@ -1,82 +1,119 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer } from 'react'
+import * as O from 'fp-ts/Option'
+import { pipe } from 'fp-ts/function'
 
 import { useTodos } from '../../hooks/useTodos'
 import { useUsers } from '../../hooks/useUsers'
 import type { Todo } from '../../types/todo'
 import type { User } from '../../types/user'
+import {
+  applyTodoFilter,
+  createHomeViewModel,
+  decodeSelectedUserId,
+  decodeTodoFilter,
+  encodeSelectedUserId,
+  encodeTodoFilter,
+  isHideCompleted,
+  transition,
+  type HomeAction,
+  type HomeState,
+} from './model'
 
 const SELECTED_USER_ID_KEY = 'selectedUserId'
 const HIDE_COMPLETED_KEY = 'hideCompleted'
-const EMPTY_USERS: readonly User[] = []
-const EMPTY_TODOS: readonly Todo[] = []
+const EMPTY_USERS: ReadonlyArray<User> = []
+const EMPTY_TODOS: ReadonlyArray<Todo> = []
 
-const readSelectedUserId = (): number | null => {
-  const value = sessionStorage.getItem(SELECTED_USER_ID_KEY)
+const initializeHomeState = (): HomeState => ({
+  selectedUserId: decodeSelectedUserId(
+    sessionStorage.getItem(SELECTED_USER_ID_KEY),
+  ),
+  todoFilter: decodeTodoFilter(sessionStorage.getItem(HIDE_COMPLETED_KEY)),
+})
 
-  if (value == null) {
-    return null
-  }
-
-  const userId = Number(value)
-
-  return Number.isInteger(userId) ? userId : null
-}
-
-const readHideCompleted = (): boolean =>
-  sessionStorage.getItem(HIDE_COMPLETED_KEY) === 'true'
+const homeReducer = (state: HomeState, action: HomeAction): HomeState =>
+  transition(state)(action)
 
 export const useHomePage = () => {
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(
-    readSelectedUserId,
+  const [state, dispatch] = useReducer(
+    homeReducer,
+    undefined,
+    initializeHomeState,
   )
-  const [hideCompleted, setHideCompleted] = useState(readHideCompleted)
 
   const usersQuery = useUsers()
-  const todosQuery = useTodos(selectedUserId)
+  const todosQuery = useTodos(state.selectedUserId)
 
-  const users = usersQuery.data ?? EMPTY_USERS
-  const todos = todosQuery.data ?? EMPTY_TODOS
+  const users = pipe(
+    usersQuery.data,
+    O.fromNullable,
+    O.getOrElse(() => EMPTY_USERS),
+  )
+  const todos = pipe(
+    todosQuery.data,
+    O.fromNullable,
+    O.getOrElse(() => EMPTY_TODOS),
+  )
+  const usersError = O.fromNullable(usersQuery.error)
+  const todosError = O.fromNullable(todosQuery.error)
 
   const filteredTodos = useMemo(
-    () => (hideCompleted ? todos.filter((todo) => !todo.completed) : todos),
-    [hideCompleted, todos],
+    () => pipe(todos, applyTodoFilter(state.todoFilter)),
+    [state.todoFilter, todos],
   )
 
   const selectUser = useCallback((userId: number) => {
-    setSelectedUserId(userId)
-    setHideCompleted(false)
+    dispatch({
+      type: 'UserSelected',
+      userId,
+    })
   }, [])
 
   useEffect(() => {
-    if (selectedUserId == null) {
-      sessionStorage.removeItem(SELECTED_USER_ID_KEY)
-      return
-    }
-
-    sessionStorage.setItem(SELECTED_USER_ID_KEY, String(selectedUserId))
-  }, [selectedUserId])
+    pipe(
+      encodeSelectedUserId(state.selectedUserId),
+      O.match(
+        () => sessionStorage.removeItem(SELECTED_USER_ID_KEY),
+        userId => sessionStorage.setItem(SELECTED_USER_ID_KEY, userId),
+      ),
+    )
+  }, [state.selectedUserId])
 
   useEffect(() => {
-    sessionStorage.setItem(HIDE_COMPLETED_KEY, String(hideCompleted))
-  }, [hideCompleted])
+    sessionStorage.setItem(
+      HIDE_COMPLETED_KEY,
+      encodeTodoFilter(state.todoFilter),
+    )
+  }, [state.todoFilter])
 
   const toggleHideCompleted = useCallback(() => {
-    setHideCompleted((currentValue) => !currentValue)
+    dispatch({ type: 'FilterToggled' })
   }, [])
+
+  const viewModel = createHomeViewModel({
+    selectedUserId: state.selectedUserId,
+    isUsersLoading: usersQuery.isLoading,
+    isTodosLoading: todosQuery.isLoading,
+    usersError,
+    todosError,
+    users,
+    todos,
+    filteredTodos,
+  })
 
   return {
     users,
     todos,
     filteredTodos,
-    selectedUserId,
-    hideCompleted,
+    selectedUserId: state.selectedUserId,
+    hideCompleted: isHideCompleted(state.todoFilter),
     selectUser,
     toggleHideCompleted,
     isUsersLoading: usersQuery.isLoading,
     isTodosLoading: todosQuery.isLoading,
     isLoading: usersQuery.isLoading || todosQuery.isLoading,
-    usersError: usersQuery.error,
-    todosError: todosQuery.error,
-    error: usersQuery.error ?? todosQuery.error,
+    usersError,
+    todosError,
+    viewModel,
   }
 }

@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import * as O from 'fp-ts/Option'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useTodos } from '../../hooks/useTodos'
@@ -10,7 +11,7 @@ import { useHomePage } from './useHomePage'
 vi.mock('../../hooks/useUsers')
 vi.mock('../../hooks/useTodos')
 
-const users: User[] = [
+const users: ReadonlyArray<User> = [
   {
     id: 1,
     name: 'John Doe',
@@ -23,7 +24,7 @@ const users: User[] = [
   },
 ]
 
-const todos: Todo[] = [
+const todos: ReadonlyArray<Todo> = [
   {
     id: 1,
     userId: 1,
@@ -93,7 +94,7 @@ describe('useHomePage', () => {
       result.current.selectUser(2)
     })
 
-    expect(result.current.selectedUserId).toBe(2)
+    expect(result.current.selectedUserId).toEqual(O.some(2))
     expect(result.current.hideCompleted).toBe(false)
   })
 
@@ -102,7 +103,7 @@ describe('useHomePage', () => {
 
     const { result } = renderHook(() => useHomePage())
 
-    expect(result.current.selectedUserId).toBe(2)
+    expect(result.current.selectedUserId).toEqual(O.some(2))
   })
 
   it('initializes hideCompleted from sessionStorage', () => {

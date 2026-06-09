@@ -1,3 +1,6 @@
+import * as RA from 'fp-ts/ReadonlyArray'
+import { flow } from 'fp-ts/function'
+
 import type { User } from '../../types/user'
 import { ActionButton, Avatar, Card, Name, UserInfo, Username } from './styles'
 
@@ -7,14 +10,14 @@ type UserCardProps = {
   onSelect: (userId: number) => void
 }
 
-const getInitials = (name: string): string =>
-  name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
+const getInitials = flow(
+  (name: string) => name.split(' '),
+  RA.filter((part) => part.length > 0),
+  RA.takeLeft(2),
+  RA.map((part) => part[0]),
+  (parts) => parts.join(''),
+  (initials) => initials.toUpperCase(),
+)
 
 export function UserCard({ user, selected, onSelect }: UserCardProps) {
   return (
